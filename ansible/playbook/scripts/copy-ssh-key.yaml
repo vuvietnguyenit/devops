@@ -1,0 +1,9 @@
+- name: Copy ssh public key
+  hosts: vms
+  tasks:
+
+    - name: Copy pulic key
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.ssh/authorized_keys
+        line: |
+          ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDREX/acaXT22AFQQ0BO8Me9mduQbY78ARUzFa4Rav13E9eGpv1z+xlBu9+WFYmWGb9nzKlTuAghzEIPhQlMklc+vnwO1F2dCmDz6CkcNPe2EBL0Glt4WtsRq+dvYODlzRojuPe7sHnR6cKZOULOAVszMiLTtIJ5MD+gxLszlBn2K+pbfYJKTTwxICItWcxyqSvclfPOtZ71eFFXeU4RablgLSQ3eKkdWU5oYItcWcSbBqvPcaQHxjcwZGYdo7ZrguTiROkETYQn83RBdap29rT2nMBlxWE+jzZyRdwSzMy8Rt5MhXk9+TTMH9XPqiCHucVTrR7mJ6evvmLGh+Wl0SH7IgJSuUzeFqLchMhuig9Ab1Gf+wrCJ7CUD6VUGWnnyXFd2CTlH583UonZ8c1k7urkVwfFVUx1XbrVBNr1a2a6iHUw5MHB9rIoot4FEBOGwnEt9hG4C3wwGkyBiCWjxMoLrMs70FsGhpYAbR7uxTyzZ9SY6W369/E+kLGPVxN/rs= vuvie@LAPTOP-CQB232GL

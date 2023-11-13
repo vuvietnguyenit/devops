@@ -1,0 +1,50 @@
+worker:
+  hosts:
+    worker-1:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.246
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+
+    worker-2:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.34
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+
+    worker-3:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.248
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+
+storage:
+  hosts:
+    storage-1:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.62
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+    storage-2:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.30
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+    storage-3:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.36
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+    
+
+manager:
+  hosts:
+    control-plane:
+      ansible_user: "{{SSH_USER}}"
+      ansible_host: 10.90.92.115
+      ansible_ssh_private_key_file: "{{SSH_PRIVATE_KEY}}"
+
+vms:
+  vars:
+    # Define global variable
+    SSH_USER: ubuntu
+    SSH_PRIVATE_KEY: /home/ubuntu/.ssh/id_rsa
+
+  children:
+    worker:
+    manager:
+    storage:

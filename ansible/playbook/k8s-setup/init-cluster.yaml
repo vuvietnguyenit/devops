@@ -1,0 +1,39 @@
+- name: Init cluster K8S
+  become: true
+  hosts: manager
+  tasks:
+
+    - name: Init cluster
+      vars:
+        dns: cluster-endpoint
+        cidr: 192.168.0.0/16
+      ansible.builtin.command: kubeadm init --pod-network-cidr={{ cidr }} --control-plane-endpoint={{ dns }}
+      changed_when: true
+      register: init_result
+
+    - name: Print
+      ansible.builtin.debug:
+        msg: '{{ init_result }}'
+
+    - name: Mkdir
+      ansible.builtin.file:
+        path: $HOME/.kube
+        state: directory
+        mode: '0666'
+
+    - name: Copy
+      become: true
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        remote_src: true
+        dest: $HOME/.kube/config
+        mode: preserve
+
+    - name: Chown
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          sudo chown $(id -u):$(id -g) $HOME/.kube/config
+        executable: /bin/bash
+      changed_when: true
+      register: run_result

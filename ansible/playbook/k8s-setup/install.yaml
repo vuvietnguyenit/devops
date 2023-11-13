@@ -1,0 +1,215 @@
+- name: Install docker and dependencies
+  hosts: vms
+  tasks:
+    - name: Ping to hosts
+      ansible.builtin.ping:
+
+    - name: Check swap
+      ansible.builtin.command: swapon -s
+      register: swap_print_result
+      changed_when: false
+
+    - name: Disable swap
+      ansible.builtin.command: swapoff -a
+      when: swap_print_result.stdout != ""
+      changed_when: true
+
+    - name: Check netfilter
+      ansible.builtin.shell:
+        cmd: |
+          lsmod | grep br_netfilter | wc -l
+        executable: /bin/bash
+      register: br_netfilter_var
+      ignore_errors: true
+      changed_when: false
+
+    - name: Load module netfilter
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          modprobe br_netfilter
+          echo "br_netfilter" >> /etc/modules
+        executable: /bin/bash
+      changed_when: true
+      when: br_netfilter_var.stdout == 0
+
+    # Install system requriments package for docker
+    - name: Install required system packages
+      become: true
+      ansible.builtin.apt:
+        pkg:
+          - aptitude
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - gnupg
+          - python3-setuptools
+        state: present
+        update_cache: true
+      register: aptout_docker_system_requirement
+
+    # Install docker
+    - name: Remove conflict packages
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove $pkg; done
+        executable: /bin/bash
+      register: output_conflic_package
+      changed_when: false
+
+    # Create keyrings folder if it not exists
+    - name: Create keyrings folder if it not exists
+      become: true
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: '0775'
+
+    - name: Add Docker GPG apt Key
+      become: true
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+        keyring: /etc/apt/keyrings/docker.gpg
+
+    - name: Chmod a+r /etc/apt/keyrings/docker.gpg
+      become: true
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        state: file
+        mode: a+r
+
+    - name: Add Docker Repository
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          echo \
+          "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        executable: /bin/bash
+      ignore_errors: true
+      changed_when: false
+      register: add_docker_repo_ignore_error
+
+    # Sudo apt update
+    - name: Sudo apt update
+      become: true
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    # Install docker engine
+    - name: Install docker
+      vars:
+        docker_version: 5:24.0.7-1~ubuntu.20.04~focal
+      become: true
+      ansible.builtin.apt:
+        pkg:
+          - docker-ce={{ docker_version }}
+          - docker-ce-cli={{ docker_version }}
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable systemd docker service
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Privilige docker non-root user
+      become: true
+      ansible.builtin.file:
+        path: /var/run/docker.sock
+        mode: '0666'
+
+- name: Setup kubeadm, kubectl, kubelet
+  become: true
+  hosts: vms
+  tasks:
+    - name: Sudo apt update
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Download signing key GPG
+      ansible.builtin.apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key
+        keyring: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        state: present
+
+    - name: Add K8s repo
+      ansible.builtin.shell:
+        cmd: |
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' \
+          | sudo tee /etc/apt/sources.list.d/kubernetes.list
+        executable: /bin/bash
+      ignore_errors: true
+      changed_when: false
+      register: add_k8s_repo_ignore_error
+
+
+    # Install k8s engine
+    - name: Install kubeadm, kubectl, kubelet
+      ansible.builtin.apt:
+        pkg:
+          - kubeadm
+          - kubectl
+          - kubelet
+        state: present
+        update_cache: true
+
+    # Install k8s engine
+    - name: Install kubeadm, kubectl, kubelet
+      ansible.builtin.apt:
+        pkg:
+          - kubeadm
+          - kubectl
+          - kubelet
+        state: present
+        update_cache: true
+
+    - name: Hold kubeadm
+      ansible.builtin.dpkg_selections:
+        name: kubeadm
+        selection: hold
+
+    - name: Hold kubectl
+      ansible.builtin.dpkg_selections:
+        name: kubectl
+        selection: hold
+
+    - name: Hold kubelet
+      ansible.builtin.dpkg_selections:
+        name: kubelet
+        selection: hold
+
+    # Stage for config containerd
+    - name: Point to etc/host
+      vars:
+        row_data: 10.120.73.177 cluster-endpoint
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ row_data }}"
+        state: present
+        create: false
+
+    - name: Modify config.toml containerd
+      ansible.builtin.copy:
+        src: /home/ubuntu/ansible/configs/containerd/config.toml
+        dest: /etc/containerd/config.toml
+        mode: preserve
+
+    - name: Restart containerd
+      ansible.builtin.service:
+        name: containerd
+        state: restarted

@@ -1,0 +1,23 @@
+- name: Pre-config es cluster
+  hosts: nodes
+  tasks:
+    - name: Config vm.max_map_count
+      become: true
+      ansible.posix.sysctl:
+        name: vm.max_map_count
+        value: 262144
+        state: present
+    
+    - name: Install unzip
+      become: true
+      ansible.builtin.apt:
+        pkg:
+          - unzip
+        state: present
+        update_cache: true
+        
+    - name: Chmod 666 /var/run/docker.sock
+      become: true
+      ansible.builtin.file:
+        path: /var/run/docker.sock
+        mode: '0666'

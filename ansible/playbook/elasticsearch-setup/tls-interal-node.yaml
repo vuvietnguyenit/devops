@@ -1,0 +1,134 @@
+# Lưu ý cấu hình max map count
+- name: Generate TLS internal node in cluster
+  hosts: node_generate_cert_and_ca
+  vars:
+    es_version: 8.10.4
+    dest_download: /home/vunv
+  tasks:
+
+    - name: Wget elasticsearch
+      ansible.builtin.get_url:
+        url: https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ es_version }}-linux-x86_64.tar.gz
+        dest: '{{ dest_download }}'
+        checksum: sha512:https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ es_version }}-linux-x86_64.tar.gz.sha512
+        mode: '0666'
+
+    - name: Unarchive compress
+      vars:
+        output_path: '{{ dest_download }}/elasticsearch-{{ es_version }}-linux-x86_64.tar.gz'
+      ansible.builtin.unarchive:
+        src: '{{ output_path }}'
+        dest: '{{ dest_download }}'
+        remote_src: true
+
+    - name: Create certs folder
+      ansible.builtin.file:
+        path: '{{ dest_download }}/elasticsearch-{{ es_version }}/config/certs'
+        state: directory
+        mode: '0775'
+
+    - name: Create config/certs/instances.yml
+      ansible.builtin.shell:
+        cmd: |
+          cat > {{ dest_download }}/elasticsearch-{{ es_version }}/config/certs/instances.yml << EOL
+          instances:
+          - name: es01
+            dns:
+              - es01
+              - localhost
+            ip:
+              - 103.107.182.171
+          - name: es02
+            dns:
+              - es02
+              - localhost
+            ip:
+              - 103.148.57.166
+          - name: es03
+            dns:
+              - es03
+              - localhost
+            ip:
+              - 103.148.57.141
+          EOL
+        executable: /bin/bash
+        chdir: '{{ dest_download }}/elasticsearch-{{ es_version }}/config'
+      failed_when: false
+      changed_when: false
+
+    - name: Create CA
+      ansible.builtin.shell:
+        cmd: |
+           bin/elasticsearch-certutil ca --silent --pem -out {{ dest_download }}/elasticsearch-{{ es_version }}/config/certs/ca.zip;
+        executable: /bin/bash
+        chdir: '{{ dest_download }}/elasticsearch-{{ es_version }}'
+      failed_when: false
+      changed_when: false
+
+    - name: Upzip CA
+      ansible.builtin.unarchive:
+        src: '{{ dest_download }}/elasticsearch-{{ es_version }}/config/certs/ca.zip'
+        dest: '{{ dest_download }}/elasticsearch-{{ es_version }}/config/certs'
+        remote_src: true
+
+    - name: Create cert from instance
+      ansible.builtin.shell:
+        cmd: |
+          bin/elasticsearch-certutil cert \
+              --silent --pem -out config/certs/certs.zip \
+              --in config/certs/instances.yml \
+              --ca-cert config/certs/ca/ca.crt \
+              --ca-key config/certs/ca/ca.key;
+        executable: /bin/bash
+        chdir: '{{ dest_download }}/elasticsearch-{{ es_version }}'
+      failed_when: false
+      changed_when: false
+
+    - name: Copy cert from remote to local
+      ansible.builtin.fetch:
+        src: "{{ dest_download }}/elasticsearch-{{ es_version }}/config/certs/certs.zip"
+        dest: /home/vunv/work/ops/ansible/tmp/es-certs/
+        flat: true
+
+    - name: Copy CA from remote to local
+      ansible.builtin.fetch:
+        src: "{{ dest_download }}/elasticsearch-{{ es_version }}/config/certs/ca.zip"
+        dest: /home/vunv/work/ops/ansible/tmp/es-certs/
+        flat: true
+
+    - name: Remove elasticsearch directory temp
+      ansible.builtin.shell:
+        cmd: |
+          rm -rf elasticsearch-{{ es_version }}*
+        executable: /bin/bash
+        chdir: '{{ dest_download }}'
+      failed_when: false
+      changed_when: false
+
+- name: Send certs and CA to nodes
+  hosts: nodes
+  vars:
+    cert_folder: /home/vunv/work/ops/ansible/tmp/es-certs/
+    dest_folder: /home/vunv/es-certs/
+  tasks:
+    - name: Start sending certs to all node
+      ansible.builtin.copy:
+        src: "{{ cert_folder }}"
+        dest: "{{ dest_folder }}"
+        mode: "0664"
+
+    - name: Unzip certs
+      vars:
+        filename: certs.zip
+      ansible.builtin.unarchive:
+        src: "{{ dest_folder }}{{ filename }}"
+        remote_src: true
+        dest: "{{ dest_folder }}"
+
+    - name: Unzip CA
+      vars:
+        filename: ca.zip
+      ansible.builtin.unarchive:
+        src: "{{ dest_folder }}{{ filename }}"
+        remote_src: true
+        dest: "{{ dest_folder }}"
